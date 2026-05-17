@@ -15,4 +15,4 @@ class SimulationSnapshot(models.Model):
         ordering = ['-tick_number']
 
     def __str__(self):
-        return f'Snapshot tick={self.tick_number} label={self.label}'
+        return f'Snapshot id={self.pk} tick={self.tick_number} — {self.label}'

@@ -8,4 +8,5 @@ urlpatterns = [
     path('api/simulation/', include('apps.simulation.urls')),
     path('api/policies/', include('apps.policies.urls')),
     path('api/resources/', include('apps.resources.urls')),
+    path('api/snapshots/', include('apps.snapshots.urls')),
 ]
