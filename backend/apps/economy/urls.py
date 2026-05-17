@@ -1,0 +1,11 @@
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import EconomyStateViewSet, TransactionViewSet
+
+router = DefaultRouter()
+router.register(r'state', EconomyStateViewSet, basename='economy-state')
+router.register(r'transactions', TransactionViewSet, basename='transaction')
+
+urlpatterns = [
+    path('', include(router.urls)),
+]
