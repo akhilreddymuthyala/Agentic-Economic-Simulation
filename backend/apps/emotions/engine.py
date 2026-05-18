@@ -1,0 +1,264 @@
+"""
+Emotion Engine — Phase 5
+
+Per-agent emotion vector: fear, greed, trust, optimism, stress, panic
+Each emotion decays toward baseline each tick without reinforcement.
+Triggers fire based on economy conditions and resource shortages.
+"""
+import logging
+import random
+from django.db.models import Q
+from apps.agents.models import Agent, AgentRole, AgentEmotionState
+
+logger = logging.getLogger(__name__)
+
+# ── Decay rates per tick (emotion × decay = reduction per tick) ───────────────
+EMOTION_DECAY = {
+    'fear':     0.02,
+    'greed':    0.015,
+    'trust':    0.005,   # trust decays slowly
+    'optimism': 0.01,
+    'stress':   0.025,
+    'panic':    0.035,   # panic decays fastest
+}
+
+# ── Baseline values emotions revert toward ────────────────────────────────────
+EMOTION_BASELINE = {
+    'fear':     0.05,
+    'greed':    0.15,
+    'trust':    0.50,
+    'optimism': 0.45,
+    'stress':   0.10,
+    'panic':    0.02,
+}
+
+# ── Thresholds that define dominant emotion ───────────────────────────────────
+DOMINANT_THRESHOLD = 0.35
+
+# ── Economy trigger thresholds ────────────────────────────────────────────────
+GDP_GROWTH_OPTIMISM_THRESHOLD = 0.5      # % growth triggers optimism
+GDP_DECLINE_FEAR_THRESHOLD = -0.5        # % decline triggers fear
+INFLATION_STRESS_THRESHOLD = 8.0        # inflation above this → stress
+INFLATION_PANIC_THRESHOLD = 20.0        # inflation above this → panic
+UNEMPLOYMENT_STRESS_THRESHOLD = 15.0   # unemployment above this → stress
+MARKET_CRASH_THRESHOLD = 40.0          # confidence below this → panic
+MARKET_BOOM_THRESHOLD = 80.0           # confidence above this → optimism
+SHORTAGE_FEAR_BOOST = 0.08             # fear boost per shortage event
+
+
+def compute_dominant_emotion(fear, greed, trust, optimism, stress, panic) -> str:
+    emotions = {
+        'fear': fear,
+        'greed': greed,
+        'trust': trust,
+        'optimism': optimism,
+        'stress': stress,
+        'panic': panic,
+    }
+    # Panic and fear override others at lower thresholds
+    if panic >= 0.5:
+        return AgentEmotionState.PANIC
+    if fear >= 0.55:
+        return AgentEmotionState.FEARFUL
+    if all(v < DOMINANT_THRESHOLD for v in emotions.values()):
+        return AgentEmotionState.NEUTRAL
+
+    dominant = max(emotions, key=emotions.get)
+    mapping = {
+        'fear':     AgentEmotionState.FEARFUL,
+        'greed':    AgentEmotionState.GREEDY,
+        'trust':    AgentEmotionState.TRUSTING,
+        'optimism': AgentEmotionState.OPTIMISTIC,
+        'stress':   AgentEmotionState.STRESSED,
+        'panic':    AgentEmotionState.PANIC,
+    }
+    return mapping.get(dominant, AgentEmotionState.NEUTRAL)
+
+
+def clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
+    return max(lo, min(hi, value))
+
+
+def compute_economy_triggers(context: dict) -> dict:
+    """
+    Return a dict of emotion deltas to apply to all agents
+    based on current economy state.
+    """
+    eco = context['economy']
+    shortages = context.get('resource_shortages', [])
+    gdp_growth = eco.get('gdp_growth_rate', 0.0)
+    inflation = eco.get('inflation', 2.0)
+    unemployment = eco.get('unemployment', 5.0)
+    confidence = eco.get('market_confidence', 70.0)
+
+    deltas = {
+        'fear': 0.0,
+        'greed': 0.0,
+        'trust': 0.0,
+        'optimism': 0.0,
+        'stress': 0.0,
+        'panic': 0.0,
+    }
+
+    # GDP growth → optimism / fear
+    if gdp_growth > GDP_GROWTH_OPTIMISM_THRESHOLD:
+        deltas['optimism'] += min(0.05, gdp_growth * 0.02)
+        deltas['greed'] += min(0.03, gdp_growth * 0.01)
+    elif gdp_growth < GDP_DECLINE_FEAR_THRESHOLD:
+        deltas['fear'] += min(0.06, abs(gdp_growth) * 0.02)
+        deltas['stress'] += min(0.04, abs(gdp_growth) * 0.015)
+
+    # Inflation stress / panic
+    if inflation > INFLATION_PANIC_THRESHOLD:
+        deltas['panic'] += 0.08
+        deltas['fear'] += 0.06
+        deltas['stress'] += 0.05
+    elif inflation > INFLATION_STRESS_THRESHOLD:
+        deltas['stress'] += 0.04
+        deltas['fear'] += 0.02
+
+    # Unemployment stress
+    if unemployment > UNEMPLOYMENT_STRESS_THRESHOLD:
+        deltas['stress'] += 0.04
+        deltas['fear'] += 0.03
+        deltas['optimism'] -= 0.02
+
+    # Market confidence crash → panic
+    if confidence < MARKET_CRASH_THRESHOLD:
+        deltas['panic'] += 0.06
+        deltas['fear'] += 0.05
+        deltas['trust'] -= 0.03
+    elif confidence > MARKET_BOOM_THRESHOLD:
+        deltas['optimism'] += 0.03
+        deltas['greed'] += 0.02
+        deltas['trust'] += 0.01
+
+    # Resource shortages → fear and stress
+    for shortage in shortages:
+        deltas['fear'] += SHORTAGE_FEAR_BOOST
+        deltas['stress'] += SHORTAGE_FEAR_BOOST * 0.5
+
+    return deltas
+
+
+def apply_decay(agent: Agent) -> Agent:
+    """Apply per-tick emotion decay toward baseline."""
+    agent.emotion_fear = clamp(
+        agent.emotion_fear + (EMOTION_BASELINE['fear'] - agent.emotion_fear) * EMOTION_DECAY['fear']
+    )
+    agent.emotion_greed = clamp(
+        agent.emotion_greed + (EMOTION_BASELINE['greed'] - agent.emotion_greed) * EMOTION_DECAY['greed']
+    )
+    agent.emotion_trust = clamp(
+        agent.emotion_trust + (EMOTION_BASELINE['trust'] - agent.emotion_trust) * EMOTION_DECAY['trust']
+    )
+    agent.emotion_optimism = clamp(
+        agent.emotion_optimism + (EMOTION_BASELINE['optimism'] - agent.emotion_optimism) * EMOTION_DECAY['optimism']
+    )
+    agent.emotion_stress = clamp(
+        agent.emotion_stress + (EMOTION_BASELINE['stress'] - agent.emotion_stress) * EMOTION_DECAY['stress']
+    )
+    agent.emotion_panic = clamp(
+        agent.emotion_panic + (EMOTION_BASELINE['panic'] - agent.emotion_panic) * EMOTION_DECAY['panic']
+    )
+    return agent
+
+
+def apply_triggers(agent: Agent, deltas: dict,
+                   role_sensitivity: float = 1.0) -> Agent:
+    """Apply economy trigger deltas to an agent, scaled by role sensitivity."""
+    agent.emotion_fear = clamp(agent.emotion_fear + deltas['fear'] * role_sensitivity)
+    agent.emotion_greed = clamp(agent.emotion_greed + deltas['greed'] * role_sensitivity)
+    agent.emotion_trust = clamp(agent.emotion_trust + deltas['trust'] * role_sensitivity)
+    agent.emotion_optimism = clamp(agent.emotion_optimism + deltas['optimism'] * role_sensitivity)
+    agent.emotion_stress = clamp(agent.emotion_stress + deltas['stress'] * role_sensitivity)
+    agent.emotion_panic = clamp(agent.emotion_panic + deltas['panic'] * role_sensitivity)
+    return agent
+
+
+# Role sensitivity — how strongly each role reacts to economy triggers
+ROLE_SENSITIVITY = {
+    AgentRole.CONSUMER:          1.2,
+    AgentRole.WORKER:            1.1,
+    AgentRole.TRADER:            0.9,
+    AgentRole.INVESTOR:          0.8,
+    AgentRole.BUSINESS_OWNER:    0.85,
+    AgentRole.MANUFACTURER:      0.8,
+    AgentRole.GOVERNMENT:        0.4,
+    AgentRole.BANKER:            0.6,
+    AgentRole.INFLUENCER:        0.7,
+    AgentRole.RESEARCHER:        0.6,
+    AgentRole.RESOURCE_SUPPLIER: 0.9,
+}
+
+
+def run_emotion_engine(context: dict) -> dict:
+    """
+    Main emotion engine entry point.
+    1. Compute economy-based trigger deltas
+    2. For each active agent: decay → apply triggers → resolve dominant emotion
+    3. Bulk update all agents
+    4. Write emotion logs every 24 ticks
+    """
+    tick = context['tick']
+    trigger_deltas = compute_economy_triggers(context)
+
+    agents = list(Agent.objects.filter(is_active=True))
+    updated = []
+
+    emotion_counts = {e: 0 for e in AgentEmotionState.values}
+
+    for agent in agents:
+        # 1. Decay
+        agent = apply_decay(agent)
+
+        # 2. Apply economy triggers scaled by role sensitivity
+        sensitivity = ROLE_SENSITIVITY.get(agent.profession, 1.0)
+        agent = apply_triggers(agent, trigger_deltas, sensitivity)
+
+        # 3. Resolve dominant emotion
+        agent.dominant_emotion = compute_dominant_emotion(
+            agent.emotion_fear, agent.emotion_greed, agent.emotion_trust,
+            agent.emotion_optimism, agent.emotion_stress, agent.emotion_panic,
+        )
+
+        emotion_counts[agent.dominant_emotion] = emotion_counts.get(agent.dominant_emotion, 0) + 1
+        updated.append(agent)
+
+    Agent.objects.bulk_update(updated, [
+        'emotion_fear', 'emotion_greed', 'emotion_trust',
+        'emotion_optimism', 'emotion_stress', 'emotion_panic',
+        'dominant_emotion',
+    ])
+
+    # Write emotion logs every 24 ticks
+    if tick % 24 == 0:
+        _write_emotion_logs(updated, tick, context)
+        logger.info(
+            f'[Tick {tick}] Emotions — '
+            + ' '.join(f'{k}:{v}' for k, v in emotion_counts.items() if v > 0)
+        )
+
+    context['emotion_distribution'] = emotion_counts
+    context['trigger_deltas'] = trigger_deltas
+    return context
+
+
+def _write_emotion_logs(agents: list, tick: int, context: dict):
+    from apps.emotions.models import AgentEmotionLog
+    logs = [
+        AgentEmotionLog(
+            agent_id=a.id,
+            fear=a.emotion_fear,
+            greed=a.emotion_greed,
+            trust=a.emotion_trust,
+            optimism=a.emotion_optimism,
+            stress=a.emotion_stress,
+            panic=a.emotion_panic,
+            dominant_emotion=a.dominant_emotion,
+            tick_number=tick,
+        )
+        for a in agents
+    ]
+    AgentEmotionLog.objects.bulk_create(logs)
+    
