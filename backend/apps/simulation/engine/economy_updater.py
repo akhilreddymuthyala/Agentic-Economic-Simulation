@@ -1,34 +1,28 @@
 """
-Step 3: Update Economy (stub for Phase 3).
-Full economy calculations implemented in Phase 4.
+Step 3: Update Economy — now calls the real economy, resource, and policy engines.
 """
 import logging
-import random
+from apps.economy.engine import run_economy_engine
+from apps.resources.engine import run_resource_engine
+from apps.policies.engine import run_policy_engine
 from apps.economy.models import EconomyState
 
 logger = logging.getLogger(__name__)
 
-# How often (in ticks) to write an economy snapshot
 ECONOMY_SNAPSHOT_INTERVAL = 24  # once per sim day
 
 
 def update_economy(context: dict) -> dict:
-    """
-    Stub: apply tiny random drift to economy metrics each tick.
-    Full engine implemented in Phase 4.
-    """
     tick = context['tick']
-    eco = context['economy']
 
-    # Small random drift so metrics visibly change
-    eco['gdp'] = max(0, eco['gdp'] * (1 + random.uniform(-0.0001, 0.0002)))
-    eco['inflation'] = max(0, min(50, eco['inflation'] + random.uniform(-0.01, 0.02)))
-    eco['market_confidence'] = max(0, min(100, eco['market_confidence'] + random.uniform(-0.1, 0.1)))
-    eco['unemployment'] = max(0, min(100, eco['unemployment'] + random.uniform(-0.05, 0.05)))
-    eco['economic_stability'] = max(0, min(100, eco['economic_stability'] + random.uniform(-0.05, 0.05)))
+    # Run engines in order: policy → resource → economy
+    context = run_policy_engine(context)
+    context = run_resource_engine(context)
+    context = run_economy_engine(context)
 
-    # Write a snapshot to DB every ECONOMY_SNAPSHOT_INTERVAL ticks
+    # Write snapshot to DB once per sim day
     if tick % ECONOMY_SNAPSHOT_INTERVAL == 0:
+        eco = context['economy']
         EconomyState.objects.create(
             gdp=eco['gdp'],
             gdp_growth_rate=eco['gdp_growth_rate'],
@@ -46,7 +40,6 @@ def update_economy(context: dict) -> dict:
             simulation_month=context['month'],
             simulation_year=context['year'],
         )
-        logger.debug(f'[Tick {tick}] Economy snapshot saved. GDP={eco["gdp"]:.0f}')
+        logger.debug(f'[Tick {tick}] Economy snapshot saved.')
 
-    context['economy'] = eco
     return context
