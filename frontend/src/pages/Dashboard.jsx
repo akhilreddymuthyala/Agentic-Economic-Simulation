@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useSimulation } from '../context/SimulationContext'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { RadarChart, Radar, PolarGrid, PolarAngleAxis } from 'recharts'
 
 function MetricCard({ label, value, unit = '', color = '#00d4ff', delta }) {
   return (
@@ -35,6 +36,7 @@ export default function Dashboard() {
   const { state } = useSimulation()
   const { economy, simDate, events, tick, status, speed, formattedDate } = state
   const [history, setHistory] = useState([])
+  const { emotionDistribution, behavioralModifiers, panicWaveActive } = state
   const prevEco = useRef(economy)
 
   useEffect(() => {
@@ -116,6 +118,52 @@ export default function Dashboard() {
         ))}
       </div>
 
+      {/* Emotion & Behavior Panel */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
+
+        {/* Emotion Distribution */}
+        <div style={{ background: '#0b1120', border: `1px solid ${panicWaveActive ? '#ff3366' : '#1a2744'}`, borderRadius: 4, padding: '12px 16px', boxShadow: panicWaveActive ? '0 0 20px rgba(255,51,102,0.3)' : 'none' }}>
+          <div style={{ fontSize: 9, color: panicWaveActive ? '#ff3366' : '#64748b', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10 }}>
+            {panicWaveActive ? '⚠ PANIC WAVE ACTIVE' : 'Society Emotions'}
+          </div>
+          {Object.entries(emotionDistribution).filter(([, v]) => v > 0).map(([emotion, count]) => {
+            const colors = { fearful: '#ff3366', greedy: '#ffcc00', trusting: '#00ff88', optimistic: '#00d4ff', stressed: '#a855f7', panic: '#ff0000', neutral: '#64748b' }
+            const color = colors[emotion] || '#64748b'
+            const pct = Math.round((count / 100) * 100)
+            return (
+              <div key={emotion} style={{ marginBottom: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 2 }}>
+                  <span style={{ color, textTransform: 'uppercase', letterSpacing: 1 }}>{emotion}</span>
+                  <span style={{ color: '#e2e8f0' }}>{count} agents</span>
+                </div>
+                <div style={{ background: '#1a2744', borderRadius: 2, height: 4 }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 2, transition: 'width 0.3s' }} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Behavioral Modifiers */}
+        <div style={{ background: '#0b1120', border: '1px solid #1a2744', borderRadius: 4, padding: '12px 16px' }}>
+          <div style={{ fontSize: 9, color: '#64748b', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10 }}>
+            Behavioral Modifiers
+          </div>
+          {Object.entries(behavioralModifiers).map(([key, val]) => {
+            const label = key.replace(/_/g, ' ')
+            const isLow = val < 0.7
+            const isHigh = val > 1.3
+            const color = isLow ? '#ff3366' : isHigh ? '#00ff88' : '#64748b'
+            return (
+              <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #1a2744', fontSize: 11, fontFamily: 'Share Tech Mono, monospace' }}>
+                <span style={{ color: '#64748b', textTransform: 'uppercase', fontSize: 10 }}>{label}</span>
+                <span style={{ color }}>{typeof val === 'number' ? val.toFixed(3) : val}</span>
+              </div>
+            )
+          })}
+        </div>
+
+      </div>
       {/* Live Event Feed */}
       <div>
         <div style={{ fontSize: 9, color: '#64748b', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10 }}>

@@ -22,6 +22,10 @@ const initialState = {
   events: [],
   agentUpdates: [],
   connected: false,
+  emotionDistribution: {},
+  behavioralModifiers: {},
+  panicWaveActive: false,
+  resourceShortages: [],
 }
 
 function reducer(state, action) {
@@ -31,7 +35,7 @@ function reducer(state, action) {
 
     case 'WS_DISCONNECTED':
       return { ...state, connected: false }
-
+    
     case 'TICK_UPDATE':
       return {
         ...state,
@@ -54,7 +58,12 @@ function reducer(state, action) {
           economicStability: action.payload.economic_stability ?? state.economy.economicStability,
         },
         agentUpdates: action.payload.agent_updates ?? [],
+        emotionDistribution: action.payload.emotion_distribution ?? state.emotionDistribution,
+        behavioralModifiers: action.payload.behavioral_modifiers ?? state.behavioralModifiers,
+        panicWaveActive: action.payload.panic_wave_active ?? false,
+        resourceShortages: action.payload.resource_shortages ?? [],
       }
+
 
     case 'NEW_EVENT':
       return {
