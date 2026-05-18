@@ -47,20 +47,30 @@ SHORTAGE_FEAR_BOOST = 0.08             # fear boost per shortage event
 
 
 def compute_dominant_emotion(fear, greed, trust, optimism, stress, panic) -> str:
-    emotions = {
-        'fear': fear,
-        'greed': greed,
-        'trust': trust,
-        'optimism': optimism,
-        'stress': stress,
-        'panic': panic,
-    }
-    # Panic and fear override others at lower thresholds
-    if panic >= 0.5:
+    # Panic overrides everything at low threshold
+    if panic >= 0.35:
         return AgentEmotionState.PANIC
-    if fear >= 0.55:
+    # Fear overrides at moderate threshold
+    if fear >= 0.45:
         return AgentEmotionState.FEARFUL
-    if all(v < DOMINANT_THRESHOLD for v in emotions.values()):
+    # Stress overrides if high
+    if stress >= 0.45:
+        return AgentEmotionState.STRESSED
+
+    emotions = {
+        'fear':     fear,
+        'greed':    greed,
+        'trust':    trust,
+        'optimism': optimism,
+        'stress':   stress,
+        'panic':    panic,
+    }
+
+    max_val = max(emotions.values())
+    second_max = sorted(emotions.values())[-2]
+
+    # Only assign dominant if it clearly leads by 0.1 margin
+    if max_val - second_max < 0.10:
         return AgentEmotionState.NEUTRAL
 
     dominant = max(emotions, key=emotions.get)
@@ -80,10 +90,6 @@ def clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
 
 
 def compute_economy_triggers(context: dict) -> dict:
-    """
-    Return a dict of emotion deltas to apply to all agents
-    based on current economy state.
-    """
     eco = context['economy']
     shortages = context.get('resource_shortages', [])
     gdp_growth = eco.get('gdp_growth_rate', 0.0)
@@ -92,51 +98,47 @@ def compute_economy_triggers(context: dict) -> dict:
     confidence = eco.get('market_confidence', 70.0)
 
     deltas = {
-        'fear': 0.0,
-        'greed': 0.0,
-        'trust': 0.0,
-        'optimism': 0.0,
-        'stress': 0.0,
-        'panic': 0.0,
+        'fear': 0.0, 'greed': 0.0, 'trust': 0.0,
+        'optimism': 0.0, 'stress': 0.0, 'panic': 0.0,
     }
 
     # GDP growth → optimism / fear
     if gdp_growth > GDP_GROWTH_OPTIMISM_THRESHOLD:
-        deltas['optimism'] += min(0.05, gdp_growth * 0.02)
-        deltas['greed'] += min(0.03, gdp_growth * 0.01)
+        deltas['optimism'] += min(0.005, gdp_growth * 0.002)
+        deltas['greed'] += min(0.003, gdp_growth * 0.001)
     elif gdp_growth < GDP_DECLINE_FEAR_THRESHOLD:
-        deltas['fear'] += min(0.06, abs(gdp_growth) * 0.02)
-        deltas['stress'] += min(0.04, abs(gdp_growth) * 0.015)
+        deltas['fear'] += min(0.005, abs(gdp_growth) * 0.002)
+        deltas['stress'] += min(0.003, abs(gdp_growth) * 0.001)
 
-    # Inflation stress / panic
+    # Inflation stress / panic — only trigger at very high levels
     if inflation > INFLATION_PANIC_THRESHOLD:
-        deltas['panic'] += 0.08
-        deltas['fear'] += 0.06
-        deltas['stress'] += 0.05
+        deltas['panic'] += 0.003
+        deltas['fear'] += 0.003
+        deltas['stress'] += 0.002
     elif inflation > INFLATION_STRESS_THRESHOLD:
-        deltas['stress'] += 0.04
-        deltas['fear'] += 0.02
+        deltas['stress'] += 0.002
+        deltas['fear'] += 0.001
 
     # Unemployment stress
     if unemployment > UNEMPLOYMENT_STRESS_THRESHOLD:
-        deltas['stress'] += 0.04
-        deltas['fear'] += 0.03
-        deltas['optimism'] -= 0.02
+        deltas['stress'] += 0.002
+        deltas['fear'] += 0.001
+        deltas['optimism'] -= 0.001
 
-    # Market confidence crash → panic
+    # Market confidence
     if confidence < MARKET_CRASH_THRESHOLD:
-        deltas['panic'] += 0.06
-        deltas['fear'] += 0.05
-        deltas['trust'] -= 0.03
+        deltas['panic'] += 0.002
+        deltas['fear'] += 0.002
+        deltas['trust'] -= 0.001
     elif confidence > MARKET_BOOM_THRESHOLD:
-        deltas['optimism'] += 0.03
-        deltas['greed'] += 0.02
-        deltas['trust'] += 0.01
+        deltas['optimism'] += 0.002
+        deltas['greed'] += 0.001
+        deltas['trust'] += 0.001
 
-    # Resource shortages → fear and stress
+    # Resource shortages
     for shortage in shortages:
-        deltas['fear'] += SHORTAGE_FEAR_BOOST
-        deltas['stress'] += SHORTAGE_FEAR_BOOST * 0.5
+        deltas['fear'] += 0.003
+        deltas['stress'] += 0.001
 
     return deltas
 
