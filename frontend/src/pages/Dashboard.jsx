@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useSimulation } from '../context/SimulationContext'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis } from 'recharts'
+import AgentDeltaFeed from '../components/shared/AgentDeltaFeed'
 
 function MetricCard({ label, value, unit = '', color = '#00d4ff', delta }) {
   return (
@@ -162,7 +163,8 @@ export default function Dashboard() {
             )
           })}
         </div>
-
+      {/* Agent Activity Feed */}
+      <AgentDeltaFeed />
       </div>
       {/* Live Event Feed */}
       {/* Live Event Feed */}

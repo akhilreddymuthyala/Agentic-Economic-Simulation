@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useSimulation } from '../../context/SimulationContext'
+import ConnectionStatus from './ConnectionStatus'
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: '⬡' },
@@ -119,12 +120,8 @@ export default function Layout({ children }) {
             )}
           </div>
           {!collapsed && (
-            <div style={{ marginTop: 4, color: '#1a2744' }}>
-              WS: {state.connected ? (
-                <span style={{ color: '#00ff88' }}>connected</span>
-              ) : (
-                <span style={{ color: '#ff3366' }}>disconnected</span>
-              )}
+            <div style={{ marginTop: 6 }}>
+              <ConnectionStatus />
             </div>
           )}
         </div>
