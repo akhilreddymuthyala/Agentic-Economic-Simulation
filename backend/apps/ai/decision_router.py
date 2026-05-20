@@ -29,31 +29,29 @@ LLM_TIMEOUT = 25.0
 
 # Action → wealth delta mapping
 ACTION_WEALTH_DELTA = {
-    'buy':              lambda w, eco: -min(w * 0.05, 200),
-    'sell':             lambda w, eco: w * 0.08,
-    'save':             lambda w, eco: w * 0.001,
-    'invest':           lambda w, eco: w * (0.1 if eco.get('market_confidence', 70) > 60 else -0.05),
-    'panic':            lambda w, eco: -w * 0.15,
-    'cooperate':        lambda w, eco: w * 0.02,
-    'work':             lambda w, eco: random.uniform(50, 200),
-    'quit':             lambda w, eco: -50,
+    'buy':              lambda w, eco: -min(w * 0.04, 150) if w > 200 else 0,
+    'sell':             lambda w, eco: w * 0.06 if w > 100 else 50,
+    'save':             lambda w, eco: w * 0.002,
+    'invest':           lambda w, eco: w * (0.08 if eco.get('market_confidence', 70) > 55 else -0.03) if w > 500 else 0,
+    'panic':            lambda w, eco: -w * 0.10 if w > 100 else 0,
+    'cooperate':        lambda w, eco: w * 0.015,
+    'work':             lambda w, eco: random.uniform(80, 300),
+    'quit':             lambda w, eco: -30 if w > 200 else 0,
     'raise_taxes':      lambda w, eco: 0,
     'lower_taxes':      lambda w, eco: 0,
     'stimulus':         lambda w, eco: 0,
     'regulate':         lambda w, eco: 0,
-    'influence_market': lambda w, eco: w * 0.03,
-    'form_alliance':    lambda w, eco: w * 0.01,
+    'influence_market': lambda w, eco: w * 0.02 if w > 100 else 20,
+    'form_alliance':    lambda w, eco: w * 0.01 if w > 100 else 10,
 }
 
-
 def apply_wealth_change(agent: Agent, action: str, economy: dict) -> float:
-    """Apply wealth delta for an action. Returns delta applied."""
     delta_fn = ACTION_WEALTH_DELTA.get(action, lambda w, e: 0)
     delta = delta_fn(agent.wealth, economy)
-    new_wealth = max(0.0, agent.wealth + delta)
+    # Minimum wealth floor — agents never go below 10
+    new_wealth = max(10.0, agent.wealth + delta)
     agent.wealth = round(new_wealth, 2)
     return delta
-
 
 def run_tier1_agent(agent, economy: dict) -> dict:
     """Run LLM decision with timeout — non-blocking via thread."""
