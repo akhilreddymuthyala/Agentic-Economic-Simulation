@@ -6,6 +6,7 @@ from .models import SimulationConfig, SimulationStatus
 from .serializers import SimulationConfigSerializer
 from .clock import tick_interval_seconds, format_sim_date
 
+
 logger = logging.getLogger(__name__)
 
 VALID_SPEEDS = [1, 5, 10, 25, 50]
@@ -55,8 +56,27 @@ class SimulationControlView(APIView):
             config.reset_clock()
             config.celery_task_id = ''
             config.save()
-            logger.info('Simulation reset.')
+            broadcast_status_change('idle', config)
             return Response(SimulationConfigSerializer(config).data)
+
+        elif action == 'reset_full':
+            # Stop simulation first
+            config.status = SimulationStatus.IDLE
+            config.reset_clock()
+            config.celery_task_id = ''
+            config.save()
+            # Run full reset via management command logic inline
+            from apps.simulation.management.commands.reset_simulation import Command
+            cmd = Command()
+            cmd._reset_economy()
+            cmd._reset_policies()
+            cmd._reset_resources()
+            cmd._reset_agents()
+            broadcast_status_change('idle', config)
+            return Response({
+                **SimulationConfigSerializer(config).data,
+                'reset': 'full reset complete',
+            })
 
         elif action == 'set_speed':
             speed = int(request.data.get('speed', 1))

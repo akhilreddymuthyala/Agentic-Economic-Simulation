@@ -13,24 +13,25 @@ from apps.agents.models import Agent, AgentRole, AgentEmotionState
 logger = logging.getLogger(__name__)
 
 # ── Decay rates per tick (emotion × decay = reduction per tick) ───────────────
-EMOTION_DECAY = {
-    'fear':     0.02,
-    'greed':    0.015,
-    'trust':    0.005,   # trust decays slowly
-    'optimism': 0.01,
-    'stress':   0.025,
-    'panic':    0.035,   # panic decays fastest
+EMOTION_BASELINE = {
+    'fear':     0.08,
+    'greed':    0.18,
+    'trust':    0.45,
+    'optimism': 0.35,
+    'stress':   0.12,
+    'panic':    0.03,
 }
 
-# ── Baseline values emotions revert toward ────────────────────────────────────
-EMOTION_BASELINE = {
-    'fear':     0.05,
-    'greed':    0.15,
-    'trust':    0.50,
-    'optimism': 0.45,
-    'stress':   0.10,
-    'panic':    0.02,
+# Decay rates — much smaller so emotions don't collapse to zero
+EMOTION_DECAY = {
+    'fear':     0.008,
+    'greed':    0.006,
+    'trust':    0.003,
+    'optimism': 0.005,
+    'stress':   0.010,
+    'panic':    0.015,
 }
+
 
 # ── Thresholds that define dominant emotion ───────────────────────────────────
 DOMINANT_THRESHOLD = 0.35
@@ -144,25 +145,20 @@ def compute_economy_triggers(context: dict) -> dict:
 
 
 def apply_decay(agent: Agent) -> Agent:
-    """Apply per-tick emotion decay toward baseline."""
-    agent.emotion_fear = clamp(
-        agent.emotion_fear + (EMOTION_BASELINE['fear'] - agent.emotion_fear) * EMOTION_DECAY['fear']
-    )
-    agent.emotion_greed = clamp(
-        agent.emotion_greed + (EMOTION_BASELINE['greed'] - agent.emotion_greed) * EMOTION_DECAY['greed']
-    )
-    agent.emotion_trust = clamp(
-        agent.emotion_trust + (EMOTION_BASELINE['trust'] - agent.emotion_trust) * EMOTION_DECAY['trust']
-    )
-    agent.emotion_optimism = clamp(
-        agent.emotion_optimism + (EMOTION_BASELINE['optimism'] - agent.emotion_optimism) * EMOTION_DECAY['optimism']
-    )
-    agent.emotion_stress = clamp(
-        agent.emotion_stress + (EMOTION_BASELINE['stress'] - agent.emotion_stress) * EMOTION_DECAY['stress']
-    )
-    agent.emotion_panic = clamp(
-        agent.emotion_panic + (EMOTION_BASELINE['panic'] - agent.emotion_panic) * EMOTION_DECAY['panic']
-    )
+    """Decay toward baseline — never below baseline floor."""
+    for field, key in [
+        ('emotion_fear', 'fear'), ('emotion_greed', 'greed'),
+        ('emotion_trust', 'trust'), ('emotion_optimism', 'optimism'),
+        ('emotion_stress', 'stress'), ('emotion_panic', 'panic'),
+    ]:
+        current = getattr(agent, field)
+        baseline = EMOTION_BASELINE[key]
+        decay = EMOTION_DECAY[key]
+        # Pull toward baseline from either direction
+        new_val = current + (baseline - current) * decay
+        # Never go below baseline floor
+        new_val = max(baseline * 0.5, new_val)
+        setattr(agent, field, clamp(new_val))
     return agent
 
 

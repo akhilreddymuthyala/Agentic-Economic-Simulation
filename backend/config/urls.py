@@ -10,4 +10,6 @@ urlpatterns = [
     path('api/resources/', include('apps.resources.urls')),
     path('api/snapshots/', include('apps.snapshots.urls')),
     path('api/emotions/', include('apps.emotions.urls')),
+    path('api/ai/', include('apps.ai.urls')),
+    path('api/events/', include('apps.events.urls')),
 ]

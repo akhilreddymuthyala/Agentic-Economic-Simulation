@@ -25,6 +25,13 @@ class SimulationEvent(models.Model):
     class Meta:
         db_table = 'simulation_events'
         ordering = ['-tick_number']
+        indexes = [
+            models.Index(fields=['event_type']),
+            models.Index(fields=['tick_number']),
+            models.Index(fields=['simulation_year', 'simulation_month', 'simulation_day']),
+        ]
 
     def __str__(self):
-        return f'Event {self.event_type} tick={self.tick_number}'
+        return (f'[Y{self.simulation_year} M{self.simulation_month} '
+                f'D{self.simulation_day}] {self.event_type} '
+                f'severity={self.severity:.2f}')
