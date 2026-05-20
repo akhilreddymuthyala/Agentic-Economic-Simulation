@@ -165,24 +165,67 @@ export default function Dashboard() {
 
       </div>
       {/* Live Event Feed */}
+      {/* Live Event Feed */}
       <div>
-        <div style={{ fontSize: 9, color: '#64748b', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10 }}>
-          Live Event Feed
+        <div style={{ fontSize: 9, color: '#64748b', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10, display: 'flex', justifyContent: 'space-between' }}>
+          <span>Live Event Feed</span>
+          <span style={{ color: '#1a2744' }}>{state.events.length} events logged</span>
         </div>
         <div style={{
           background: '#0b1120', border: '1px solid #1a2744', borderRadius: 4,
-          padding: 14, maxHeight: 240, overflowY: 'auto',
+          padding: 14, maxHeight: 280, overflowY: 'auto',
           fontFamily: 'Share Tech Mono, monospace', fontSize: 11,
         }}>
-          {events.length === 0
+          {state.events.length === 0
             ? <div style={{ color: '#64748b' }}>Awaiting simulation events...</div>
-            : events.map((evt, i) => (
-              <div key={i} style={{ padding: '3px 0', borderBottom: '1px solid #1a2744', color: evt.severity > 0.7 ? '#ff3366' : '#e2e8f0' }}>
-                <span style={{ color: '#64748b' }}>[Y{evt.year} M{evt.month} D{evt.day}]</span>{' '}{evt.description}
-              </div>
-            ))
+            : state.events.map((evt, i) => {
+                const severityColor = evt.severity > 0.7 ? '#ff3366'
+                  : evt.severity > 0.4 ? '#ffcc00' : '#00ff88'
+                const typeColors = {
+                  recession: '#ff3366',
+                  market_crash: '#ff0000',
+                  panic_wave: '#ff3366',
+                  monopoly: '#a855f7',
+                  innovation_boom: '#00ff88',
+                  unemployment_crisis: '#ffcc00',
+                  shortage: '#ffcc00',
+                  recovery: '#00d4ff',
+                }
+                const typeColor = typeColors[evt.event_type] || '#64748b'
+                return (
+                  <div key={i} style={{
+                    padding: '6px 0',
+                    borderBottom: '1px solid #1a2744',
+                    display: 'flex',
+                    gap: 8,
+                    alignItems: 'flex-start',
+                  }}>
+                    <span style={{ color: '#64748b', whiteSpace: 'nowrap', fontSize: 10 }}>
+                      [Y{evt.year} M{evt.month} D{evt.day}]
+                    </span>
+                    <span style={{
+                      background: `rgba(${typeColor === '#ff3366' ? '255,51,102' : typeColor === '#00ff88' ? '0,255,136' : '255,204,0'},0.12)`,
+                      color: typeColor,
+                      padding: '1px 6px',
+                      borderRadius: 2,
+                      fontSize: 9,
+                      textTransform: 'uppercase',
+                      letterSpacing: 1,
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {evt.event_type?.replace(/_/g, ' ')}
+                    </span>
+                    <span style={{ color: '#e2e8f0', flex: 1 }}>
+                      {evt.description}
+                    </span>
+                    <span style={{ color: severityColor, fontSize: 10, whiteSpace: 'nowrap' }}>
+                      {evt.severity ? `sev ${evt.severity.toFixed(2)}` : ''}
+                    </span>
+                  </div>
+                )
+              })
           }
-        </div>
+      </div>
       </div>
     </div>
   )

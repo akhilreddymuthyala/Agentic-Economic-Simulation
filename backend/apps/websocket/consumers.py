@@ -17,7 +17,6 @@ class SimulationConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_discard(self.GROUP_NAME, self.channel_name)
 
     async def receive(self, text_data):
-        # Client-to-server messages handled here in later phases
         pass
 
     async def simulation_tick(self, event):

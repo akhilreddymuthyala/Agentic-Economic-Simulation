@@ -20,6 +20,7 @@ const initialState = {
     economicStability: 75,
   },
   events: [],
+  eventSummary: {},
   agentUpdates: [],
   connected: false,
   emotionDistribution: {},
@@ -62,8 +63,10 @@ function reducer(state, action) {
         behavioralModifiers: action.payload.behavioral_modifiers ?? state.behavioralModifiers,
         panicWaveActive: action.payload.panic_wave_active ?? false,
         resourceShortages: action.payload.resource_shortages ?? [],
+        events: action.payload.events?.length
+          ? [...action.payload.events, ...state.events].slice(0, 200)
+          : state.events,
       }
-
 
     case 'NEW_EVENT':
       return {
