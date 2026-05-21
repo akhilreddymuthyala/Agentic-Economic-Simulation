@@ -12,39 +12,31 @@ from apps.agents.models import Agent, AgentRole, AgentEmotionState
 
 logger = logging.getLogger(__name__)
 
-# ── Decay rates per tick (emotion × decay = reduction per tick) ───────────────
-EMOTION_BASELINE = {
-    'fear':     0.08,
-    'greed':    0.18,
-    'trust':    0.45,
-    'optimism': 0.35,
-    'stress':   0.12,
-    'panic':    0.03,
-}
+from apps.simulation.tuning import (
+    EMOTION_DECAY_RATES as EMOTION_DECAY,
+    EMOTION_BASELINES as EMOTION_BASELINE,
+    TRIGGER_SCALE,
+    PANIC_AGENT_FRACTION,
+)
 
-# Decay rates — much smaller so emotions don't collapse to zero
-EMOTION_DECAY = {
-    'fear':     0.008,
-    'greed':    0.006,
-    'trust':    0.003,
-    'optimism': 0.005,
-    'stress':   0.010,
-    'panic':    0.015,
-}
+
+
 
 
 # ── Thresholds that define dominant emotion ───────────────────────────────────
 DOMINANT_THRESHOLD = 0.35
 
-# ── Economy trigger thresholds ────────────────────────────────────────────────
-GDP_GROWTH_OPTIMISM_THRESHOLD = 0.5      # % growth triggers optimism
-GDP_DECLINE_FEAR_THRESHOLD = -0.5        # % decline triggers fear
-INFLATION_STRESS_THRESHOLD = 8.0        # inflation above this → stress
-INFLATION_PANIC_THRESHOLD = 20.0        # inflation above this → panic
-UNEMPLOYMENT_STRESS_THRESHOLD = 15.0   # unemployment above this → stress
-MARKET_CRASH_THRESHOLD = 40.0          # confidence below this → panic
-MARKET_BOOM_THRESHOLD = 80.0           # confidence above this → optimism
-SHORTAGE_FEAR_BOOST = 0.08             # fear boost per shortage event
+# ── Economy trigger thresholds ─────────────────────────────────────────────
+GDP_GROWTH_OPTIMISM_THRESHOLD = 0.5
+GDP_DECLINE_FEAR_THRESHOLD = -0.5
+INFLATION_STRESS_THRESHOLD = 6.0
+INFLATION_PANIC_THRESHOLD = 15.0
+INFLATION_OPTIMISM_THRESHOLD = 2.0   # LOW inflation = optimism, not panic
+UNEMPLOYMENT_STRESS_THRESHOLD = 15.0
+UNEMPLOYMENT_FEAR_THRESHOLD = 25.0
+MARKET_CRASH_THRESHOLD = 40.0
+MARKET_BOOM_THRESHOLD = 75.0
+SHORTAGE_FEAR_BOOST = 0.004
 
 
 def compute_dominant_emotion(fear, greed, trust, optimism, stress, panic) -> str:
@@ -91,6 +83,18 @@ def clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
 
 
 def compute_economy_triggers(context: dict) -> dict:
+    """
+    CORRECTED economic emotion triggers based on real economics:
+    - LOW inflation (< 2%) = deflation fear, economic stagnation
+    - MODERATE inflation (2-6%) = healthy, mild optimism
+    - HIGH inflation (> 10%) = stress, fear
+    - VERY HIGH inflation (> 20%) = panic
+    - HIGH unemployment = fear, stress
+    - GDP growth = optimism
+    - GDP decline = fear
+    - High market confidence = optimism/greed
+    - Low market confidence = fear/panic
+    """
     eco = context['economy']
     shortages = context.get('resource_shortages', [])
     gdp_growth = eco.get('gdp_growth_rate', 0.0)
@@ -103,46 +107,66 @@ def compute_economy_triggers(context: dict) -> dict:
         'optimism': 0.0, 'stress': 0.0, 'panic': 0.0,
     }
 
-    # GDP growth → optimism / fear
-    if gdp_growth > GDP_GROWTH_OPTIMISM_THRESHOLD:
-        deltas['optimism'] += min(0.005, gdp_growth * 0.002)
-        deltas['greed'] += min(0.003, gdp_growth * 0.001)
-    elif gdp_growth < GDP_DECLINE_FEAR_THRESHOLD:
-        deltas['fear'] += min(0.005, abs(gdp_growth) * 0.002)
-        deltas['stress'] += min(0.003, abs(gdp_growth) * 0.001)
-
-    # Inflation stress / panic — only trigger at very high levels
+    # ── Inflation effects ─────────────────────────────────────────────────
     if inflation > INFLATION_PANIC_THRESHOLD:
-        deltas['panic'] += 0.003
+        # Hyperinflation — fear and stress
+        deltas['stress'] += 0.004
         deltas['fear'] += 0.003
-        deltas['stress'] += 0.002
+        deltas['optimism'] -= 0.002
     elif inflation > INFLATION_STRESS_THRESHOLD:
+        # High inflation — stress
         deltas['stress'] += 0.002
         deltas['fear'] += 0.001
-
-    # Unemployment stress
-    if unemployment > UNEMPLOYMENT_STRESS_THRESHOLD:
-        deltas['stress'] += 0.002
-        deltas['fear'] += 0.001
+    elif 2.0 <= inflation <= INFLATION_STRESS_THRESHOLD:
+        # Healthy inflation zone — mild optimism
+        deltas['optimism'] += 0.001
+        deltas['trust'] += 0.0005
+    elif inflation < 0.5:
+        # Deflation — fear of economic contraction
+        deltas['fear'] += 0.002
+        deltas['stress'] += 0.001
         deltas['optimism'] -= 0.001
 
-    # Market confidence
+    # ── Unemployment effects ───────────────────────────────────────────────
+    if unemployment > UNEMPLOYMENT_FEAR_THRESHOLD:
+        deltas['fear'] += 0.003
+        deltas['stress'] += 0.003
+        deltas['optimism'] -= 0.002
+    elif unemployment > UNEMPLOYMENT_STRESS_THRESHOLD:
+        deltas['stress'] += 0.002
+        deltas['fear'] += 0.001
+    elif unemployment < 3.0:
+        # Very low unemployment = some greed/overconfidence
+        deltas['greed'] += 0.001
+        deltas['optimism'] += 0.001
+
+    # ── GDP growth effects ─────────────────────────────────────────────────
+    if gdp_growth > GDP_GROWTH_OPTIMISM_THRESHOLD:
+        deltas['optimism'] += min(0.003, gdp_growth * 0.001)
+        deltas['greed'] += min(0.002, gdp_growth * 0.0005)
+    elif gdp_growth < GDP_DECLINE_FEAR_THRESHOLD:
+        deltas['fear'] += min(0.003, abs(gdp_growth) * 0.001)
+        deltas['stress'] += min(0.002, abs(gdp_growth) * 0.0005)
+
+    # ── Market confidence effects ─────────────────────────────────────────
     if confidence < MARKET_CRASH_THRESHOLD:
-        deltas['panic'] += 0.002
+        deltas['panic'] += 0.003
         deltas['fear'] += 0.002
         deltas['trust'] -= 0.001
+    elif confidence < 55.0:
+        deltas['stress'] += 0.001
+        deltas['fear'] += 0.001
     elif confidence > MARKET_BOOM_THRESHOLD:
         deltas['optimism'] += 0.002
         deltas['greed'] += 0.001
         deltas['trust'] += 0.001
 
-    # Resource shortages
+    # ── Resource shortages ────────────────────────────────────────────────
     for shortage in shortages:
-        deltas['fear'] += 0.003
-        deltas['stress'] += 0.001
+        deltas['fear'] += SHORTAGE_FEAR_BOOST
+        deltas['stress'] += SHORTAGE_FEAR_BOOST * 0.5
 
-    return deltas
-
+    return {k: v * TRIGGER_SCALE for k, v in deltas.items()}
 
 def apply_decay(agent: Agent) -> Agent:
     """Decay toward baseline — never below baseline floor."""

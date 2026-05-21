@@ -17,27 +17,21 @@ from django.db.models import Sum, Count, Q
 from apps.events.models import SimulationEvent, EventType
 from apps.agents.models import Agent, AgentRole
 
+from apps.simulation.tuning import (
+    RECESSION_DAYS as RECESSION_GDP_DECLINE_DAYS,
+    RECESSION_PCT as RECESSION_GDP_DECLINE_PCT,
+    CRASH_DROP as MARKET_CRASH_CONFIDENCE_DROP,
+    CRASH_THRESHOLD as MARKET_CRASH_CONFIDENCE_THRESHOLD,
+    PANIC_AGENT_FRACTION as PANIC_WAVE_AGENT_PCT,
+    UNEMPLOYMENT_CRISIS_PCT as UNEMPLOYMENT_CRISIS_THRESHOLD,
+    INNOVATION_GDP_GROWTH as INNOVATION_BOOM_GDP_GROWTH,
+    INNOVATION_RESEARCHER_WEALTH as INNOVATION_BOOM_RESEARCHER_THRESHOLD_WEALTH,
+)
 logger = logging.getLogger(__name__)
 
-# ── Detection thresholds ──────────────────────────────────────────────────────
-RECESSION_GDP_DECLINE_DAYS = 3          # consecutive days of GDP decline
-RECESSION_GDP_DECLINE_PCT = -0.5        # % decline per day to count
-
-MARKET_CRASH_CONFIDENCE_THRESHOLD = 35.0
-MARKET_CRASH_CONFIDENCE_DROP = 15.0    # drop within 24 ticks
-
-PANIC_WAVE_AGENT_PCT = 0.40             # 40% of agents in panic/fear
-
-MONOPOLY_WEALTH_PCT = 0.50             # 50% of business owner wealth
-
-INNOVATION_BOOM_RESEARCHER_THRESHOLD = 2  # researchers needed
-INNOVATION_BOOM_WEALTH_GROWTH = 0.05      # 5% wealth growth in researcher group
-
-UNEMPLOYMENT_CRISIS_THRESHOLD = 25.0
-
+MONOPOLY_WEALTH_PCT = 0.50           
 SHORTAGE_CRITICAL_LEVEL = 20.0
-
-RECOVERY_GDP_GROWTH_THRESHOLD = 1.0    # % growth after recession
+RECOVERY_GDP_GROWTH_THRESHOLD = 1.0    
 
 # ── Rolling history for trend detection ───────────────────────────────────────
 # Stores last 72 economy snapshots (3 sim days at 24 ticks/day)

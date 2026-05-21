@@ -14,14 +14,18 @@ from apps.agents.models import Agent, AgentRole
 from apps.social.models import SocialRelationship
 from apps.emotions.engine import clamp, compute_dominant_emotion
 
+from apps.simulation.tuning import (
+    HERD_THRESHOLD,
+    PANIC_WAVE_THRESHOLD as PANIC_CLUSTER_THRESHOLD,
+    PANIC_WAVE_BOOST,
+    SOCIAL_INFLUENCE_SCALE as INFLUENCE_SCALE,
+)
+
 logger = logging.getLogger(__name__)
 
-# ── Config ────────────────────────────────────────────────────────────────────
-HERD_THRESHOLD = 0.4          # 40% of connections sharing emotion → herd kicks in
+
 HERD_RESISTANCE_REDUCTION = 0.5
-PANIC_CLUSTER_THRESHOLD = 0.3  # 30% of connections in panic → panic wave
-PANIC_WAVE_BOOST = 0.15        # panic boost per wave hit
-INFLUENCE_SCALE = 0.08         # max emotion transfer per tick per relationship
+  
 
 # High-influence roles that actively push emotions outward
 HIGH_INFLUENCE_ROLES = {

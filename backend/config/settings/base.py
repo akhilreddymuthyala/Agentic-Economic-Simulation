@@ -144,3 +144,12 @@ LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
+
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    'simulation-health-check': {
+        'task': 'apps.simulation.tasks.health_check_simulation',
+        'schedule': 60.0,  # every 60 seconds
+    },
+}

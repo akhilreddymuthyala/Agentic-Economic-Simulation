@@ -60,19 +60,18 @@ class Command(BaseCommand):
         from apps.agents.models import Agent, AgentRole
         from apps.emotions.engine import compute_dominant_emotion
 
-        # Wealth baselines per role
         WEALTH_RANGES = {
-            AgentRole.CONSUMER: (500, 3000),
-            AgentRole.WORKER: (800, 2500),
-            AgentRole.TRADER: (5000, 20000),
-            AgentRole.INVESTOR: (5000, 20000),
-            AgentRole.BUSINESS_OWNER: (10000, 50000),
+            AgentRole.CONSUMER: (300, 2000),
+            AgentRole.WORKER: (1000, 4000),
+            AgentRole.TRADER: (8000, 30000),
+            AgentRole.INVESTOR: (10000, 40000),
+            AgentRole.BUSINESS_OWNER: (15000, 60000),
             AgentRole.MANUFACTURER: (20000, 80000),
-            AgentRole.GOVERNMENT: (50000, 100000),
-            AgentRole.BANKER: (30000, 90000),
-            AgentRole.INFLUENCER: (5000, 25000),
-            AgentRole.RESEARCHER: (3000, 10000),
-            AgentRole.RESOURCE_SUPPLIER: (15000, 60000),
+            AgentRole.GOVERNMENT: (40000, 100000),
+            AgentRole.BANKER: (25000, 80000),
+            AgentRole.INFLUENCER: (5000, 20000),
+            AgentRole.RESEARCHER: (4000, 12000),
+            AgentRole.RESOURCE_SUPPLIER: (20000, 70000),
         }
 
         agents = list(Agent.objects.filter(is_active=True))
@@ -80,27 +79,33 @@ class Command(BaseCommand):
             lo, hi = WEALTH_RANGES.get(agent.profession, (1000, 5000))
             agent.wealth = round(random.uniform(lo, hi), 2)
 
-            # Reset emotions to varied baseline
-            agent.emotion_fear = round(random.uniform(0.05, 0.25), 3)
-            agent.emotion_greed = round(random.uniform(0.10, 0.35), 3)
-            agent.emotion_trust = round(random.uniform(0.35, 0.65), 3)
-            agent.emotion_optimism = round(random.uniform(0.25, 0.50), 3)
-            agent.emotion_stress = round(random.uniform(0.05, 0.25), 3)
-            agent.emotion_panic = round(random.uniform(0.01, 0.08), 3)
+            # Varied emotions — not all the same
+            agent.emotion_fear = round(random.uniform(0.05, 0.20), 3)
+            agent.emotion_greed = round(random.uniform(0.12, 0.30), 3)
+            agent.emotion_trust = round(random.uniform(0.35, 0.60), 3)
+            agent.emotion_optimism = round(random.uniform(0.28, 0.48), 3)
+            agent.emotion_stress = round(random.uniform(0.08, 0.22), 3)
+            agent.emotion_panic = round(random.uniform(0.02, 0.08), 3)
             agent.dominant_emotion = compute_dominant_emotion(
                 agent.emotion_fear, agent.emotion_greed,
                 agent.emotion_trust, agent.emotion_optimism,
                 agent.emotion_stress, agent.emotion_panic,
             )
             agent.last_action = 'reset'
-            agent.is_employed = agent.profession != AgentRole.CONSUMER
+            # Proper employment — workers employed, consumers unemployed
+            agent.is_employed = agent.profession in {
+                AgentRole.WORKER, AgentRole.TRADER, AgentRole.INVESTOR,
+                AgentRole.BUSINESS_OWNER, AgentRole.MANUFACTURER,
+                AgentRole.GOVERNMENT, AgentRole.BANKER, AgentRole.INFLUENCER,
+                AgentRole.RESEARCHER, AgentRole.RESOURCE_SUPPLIER,
+            }
 
         Agent.objects.bulk_update(agents, [
             'wealth', 'emotion_fear', 'emotion_greed', 'emotion_trust',
             'emotion_optimism', 'emotion_stress', 'emotion_panic',
             'dominant_emotion', 'last_action', 'is_employed',
         ])
-        self.stdout.write(f'  {len(agents)} agents reset.')
+        self.stdout.write(f'  {len(agents)} agents reset with role-appropriate wealth.')
 
     def _reset_simulation_config(self):
         from apps.simulation.models import SimulationConfig, SimulationStatus

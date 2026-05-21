@@ -281,9 +281,17 @@ def get_pipeline():
 
 def run_llm_decision(agent, economy: dict) -> dict:
     """
-    Entry point for Tier 1 LLM decision.
-    Returns decision dict.
+    Entry point for Tier 1 LLM decision with full fallback chain:
+    LLM → Neural → Rule-Based
     """
+    from apps.ai.neural_model import run_neural_decision
+    from apps.ai.rule_engine import run_rule_decision
+
+    # Skip LLM if no API key
+    if not OPENROUTER_API_KEY:
+        logger.debug(f'No API key — using neural for agent {agent.id}')
+        return run_neural_decision(agent, economy)
+
     pipeline = get_pipeline()
 
     initial_state = AgentPipelineState(
@@ -306,17 +314,20 @@ def run_llm_decision(agent, economy: dict) -> dict:
 
     try:
         result = pipeline.invoke(initial_state)
+        action = result.get('final_action', 'save')
+        if not action or action not in VALID_ACTIONS:
+            action = 'save'
         return {
-            'action': result['final_action'],
-            'confidence': result['confidence'],
-            'reasoning': result['reasoning'],
+            'action': action,
+            'confidence': result.get('confidence', 0.5),
+            'reasoning': result.get('reasoning', ''),
             'tier': 1,
         }
     except Exception as e:
-        logger.error(f'LLM pipeline failed for agent {agent.id}: {e}')
-        return {
-            'action': 'save',
-            'confidence': 0.4,
-            'reasoning': f'Pipeline error: {str(e)[:100]}',
-            'tier': 1,
-        }
+        logger.warning(f'LLM pipeline failed for agent {agent.id}: {e} — falling back to neural')
+        try:
+            return run_neural_decision(agent, economy)
+        except Exception as e2:
+            logger.warning(f'Neural fallback failed for agent {agent.id}: {e2} — using rule')
+            result = run_rule_decision(agent, economy)
+            return {**result, 'tier': 1}
