@@ -48,6 +48,13 @@ const initialState = {
 
   // Policy
   policy: {},
+  socialControls: {
+    fear_sensitivity: 1.0,
+    greed_level: 0.15,
+    trust_level: 0.5,
+    cooperation_rate: 0.5,
+    social_influence_strength: 0.5,
+  },
 }
 
 function applyEconomyFromPayload(payload, current) {
@@ -75,6 +82,9 @@ function reducer(state, action) {
 
     case 'HEARTBEAT':
       return { ...state, lastHeartbeat: Date.now() }
+    
+    case 'SET_SOCIAL_CONTROLS':
+      return { ...state, socialControls: { ...state.socialControls, ...action.payload } }  
 
     case 'INITIAL_STATE': {
       const p = action.payload

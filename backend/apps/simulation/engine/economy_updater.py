@@ -1,26 +1,26 @@
 """
-Step 3: Update Economy — now calls the real economy, resource, and policy engines.
+Step 3: Update Economy — policy → resource → circulation → economy engines.
 """
 import logging
 from apps.economy.engine import run_economy_engine
 from apps.resources.engine import run_resource_engine
 from apps.policies.engine import run_policy_engine
+from apps.economy.circulation import run_circulation
 from apps.economy.models import EconomyState
 
 logger = logging.getLogger(__name__)
-
-ECONOMY_SNAPSHOT_INTERVAL = 24  # once per sim day
+ECONOMY_SNAPSHOT_INTERVAL = 24
 
 
 def update_economy(context: dict) -> dict:
     tick = context['tick']
 
-    # Run engines in order: policy → resource → economy
+    # Order matters: policy → resource → circulation → economy
     context = run_policy_engine(context)
     context = run_resource_engine(context)
+    context = run_circulation(context)     # NEW — money flows between agents
     context = run_economy_engine(context)
 
-    # Write snapshot to DB once per sim day
     if tick % ECONOMY_SNAPSHOT_INTERVAL == 0:
         eco = context['economy']
         EconomyState.objects.create(
@@ -40,6 +40,5 @@ def update_economy(context: dict) -> dict:
             simulation_month=context['month'],
             simulation_year=context['year'],
         )
-        logger.debug(f'[Tick {tick}] Economy snapshot saved.')
 
     return context

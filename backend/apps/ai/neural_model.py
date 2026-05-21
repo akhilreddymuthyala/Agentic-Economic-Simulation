@@ -64,30 +64,34 @@ def build_model():
 
 
 def get_model():
-    """Lazy-load or train the model."""
+    """Lazy-load model with fallback retrain if weights are corrupt."""
     global _model
     if _model is not None:
         return _model
 
     import torch
-
     device = _get_device()
     model = build_model().to(device)
 
     if os.path.exists(MODEL_PATH):
         try:
-            model.load_state_dict(torch.load(MODEL_PATH, map_location=device, weights_only=True))
+            model.load_state_dict(
+                torch.load(MODEL_PATH, map_location=device, weights_only=True)
+            )
             model.eval()
             logger.info('Neural model loaded from disk.')
             _model = model
             return _model
         except Exception as e:
-            logger.warning(f'Could not load model weights: {e}. Training fresh model.')
+            logger.warning(f'Model load failed ({e}) — retraining.')
+            # Delete corrupt weights file
+            try:
+                os.remove(MODEL_PATH)
+            except Exception:
+                pass
 
-    # Train on synthetic data if no saved weights
     _model = train_synthetic(model, device)
     return _model
-
 
 def generate_synthetic_data(n_samples: int = 5000):
     """

@@ -108,44 +108,42 @@ def calculate_inflation(current_inflation: float, policy: PolicyState,
 def calculate_unemployment(current_unemployment: float, policy: PolicyState,
                            gdp: float, prev_gdp: float) -> float:
     """
-    Unemployment driven by:
-    - GDP growth (Okun's law: +1% GDP growth → -0.5% unemployment)
-    - Interest rate (higher = less business investment = more unemployment)
-    - Government spending (job creation)
-    - Stimulus
+    Unemployment based on ACTUAL agent employment status.
+    Workers and Consumers who are not employed = unemployed.
     """
+    from apps.agents.models import Agent, AgentRole
+    from django.db.models import Count
+
+    # Count actual agent employment
+    worker_consumer = Agent.objects.filter(
+        profession__in=[AgentRole.WORKER, AgentRole.CONSUMER],
+        is_active=True,
+    )
+    total = worker_consumer.count()
+    employed = worker_consumer.filter(is_employed=True).count()
+
+    if total == 0:
+        return current_unemployment
+
+    # Real unemployment rate from agent states
+    real_unemployment = ((total - employed) / total) * 100.0
+
+    # Apply Okun's law on top of real rate
     gdp_growth = 0.0
     if prev_gdp > 0:
         gdp_growth = (gdp - prev_gdp) / prev_gdp * 100.0
 
-    okun_effect = -gdp_growth * 0.5
-    interest_effect = (policy.interest_rate - 5.0) * 0.05
-    spending_effect = -(policy.government_spending / 100000.0) * 0.3
-    stimulus_effect = -0.15 if policy.stimulus_active else 0.0
+    # GDP growth gradually reduces unemployment
+    okun_effect = -gdp_growth * 0.3
 
-    # Natural rate reversion toward 5%
-    reversion = (5.0 - current_unemployment) * 0.005
+    # Government spending creates jobs
+    spending_effect = -(policy.government_spending / 200000.0) * 2.0
 
-    delta = okun_effect + interest_effect + spending_effect + stimulus_effect + reversion
-    new_unemployment = current_unemployment + delta
+    # Blend model rate with real agent unemployment
+    model_rate = real_unemployment + okun_effect + spending_effect
+    blended = model_rate * 0.8 + current_unemployment * 0.2
 
-    # Count actual unemployed agents
-    total_workers = Agent.objects.filter(
-        profession__in=[AgentRole.WORKER, AgentRole.CONSUMER],
-        is_active=True,
-    ).count()
-    unemployed = Agent.objects.filter(
-        profession__in=[AgentRole.WORKER, AgentRole.CONSUMER],
-        is_active=True,
-        is_employed=False,
-    ).count()
-
-    if total_workers > 0:
-        agent_unemployment = (unemployed / total_workers) * 100.0
-        # Blend model and agent-based unemployment
-        new_unemployment = new_unemployment * 0.7 + agent_unemployment * 0.3
-
-    return max(0.0, min(100.0, new_unemployment))
+    return max(0.0, min(100.0, blended))
 
 
 def calculate_market_confidence(current_confidence: float, policy: PolicyState,

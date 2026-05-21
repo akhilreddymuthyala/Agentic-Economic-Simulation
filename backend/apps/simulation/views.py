@@ -5,6 +5,7 @@ from rest_framework import status
 from .models import SimulationConfig, SimulationStatus
 from .serializers import SimulationConfigSerializer
 from .clock import tick_interval_seconds, format_sim_date
+from .engine.broadcaster import broadcast_status_change
 
 
 logger = logging.getLogger(__name__)

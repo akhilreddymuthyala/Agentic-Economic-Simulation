@@ -27,31 +27,21 @@ TIER_3_ROLES = {AgentRole.CONSUMER, AgentRole.WORKER,
 # LLM timeout in seconds — non-blocking
 LLM_TIMEOUT = 25.0
 
-# Action → wealth delta mapping
-ACTION_WEALTH_DELTA = {
-    'buy':              lambda w, eco: -min(w * 0.04, 150) if w > 200 else 0,
-    'sell':             lambda w, eco: w * 0.06 if w > 100 else 50,
-    'save':             lambda w, eco: w * 0.002,
-    'invest':           lambda w, eco: w * (0.08 if eco.get('market_confidence', 70) > 55 else -0.03) if w > 500 else 0,
-    'panic':            lambda w, eco: -w * 0.10 if w > 100 else 0,
-    'cooperate':        lambda w, eco: w * 0.015,
-    'work':             lambda w, eco: random.uniform(80, 300),
-    'quit':             lambda w, eco: -30 if w > 200 else 0,
-    'raise_taxes':      lambda w, eco: 0,
-    'lower_taxes':      lambda w, eco: 0,
-    'stimulus':         lambda w, eco: 0,
-    'regulate':         lambda w, eco: 0,
-    'influence_market': lambda w, eco: w * 0.02 if w > 100 else 20,
-    'form_alliance':    lambda w, eco: w * 0.01 if w > 100 else 10,
-}
+ACTION_WEALTH_DELTA = {}  # Empty — circulation handles wealth
 
-def apply_wealth_change(agent: Agent, action: str, economy: dict) -> float:
-    delta_fn = ACTION_WEALTH_DELTA.get(action, lambda w, e: 0)
-    delta = delta_fn(agent.wealth, economy)
-    # Minimum wealth floor — agents never go below 10
-    new_wealth = max(10.0, agent.wealth + delta)
-    agent.wealth = round(new_wealth, 2)
-    return delta
+
+def apply_wealth_change(agent, action: str, economy: dict) -> float:
+    """
+    Decisions no longer directly change wealth.
+    The circulation engine handles all wealth transfers.
+    Only panic sells assets — that's the one exception.
+    """
+    if action == 'panic' and agent.wealth > 50:
+        # Panic sell — lose 5% as market impact
+        loss = agent.wealth * 0.05
+        agent.wealth = max(10.0, agent.wealth - loss)
+        return -loss
+    return 0.0
 
 def run_tier1_agent(agent, economy: dict) -> dict:
     """Run LLM decision with timeout — non-blocking via thread."""
@@ -124,13 +114,6 @@ def build_neighbor_map(agents: list) -> dict:
 
 
 def run_decision_router(context: dict) -> dict:
-    """
-    Main entry point — process all 100 agents each tick.
-
-    Tier 3 (rule): processed synchronously in bulk — instant
-    Tier 2 (neural): processed synchronously in batch — fast
-    Tier 1 (LLM): processed async with timeout — non-blocking
-    """
     tick = context['tick']
     economy = context['economy']
 
@@ -144,7 +127,7 @@ def run_decision_router(context: dict) -> dict:
     agent_updates = []
     decision_log = []
 
-    # ── Tier 3 — Rule-Based (instant) ────────────────────────────────────────
+    # ── Tier 3 — Rule-Based ────────────────────────────────────────────────
     for agent in tier3_agents:
         decision = run_rule_decision(agent, economy)
         apply_wealth_change(agent, decision['action'], economy)
@@ -157,7 +140,7 @@ def run_decision_router(context: dict) -> dict:
             'tier': 3,
         })
 
-    # ── Tier 2 — Neural (batch inference) ────────────────────────────────────
+    # ── Tier 2 — Neural ───────────────────────────────────────────────────
     for agent in tier2_agents:
         social_pressure = compute_social_pressure(agent, adj)
         decision = run_neural_decision(agent, economy, social_pressure)
@@ -171,35 +154,23 @@ def run_decision_router(context: dict) -> dict:
             'confidence': decision.get('confidence', 0),
             'tier': 2,
         })
-        # Log every 24 ticks to avoid DB flood
         if tick % 24 == 0:
             log_neural_decision(agent, decision, tick)
 
-    # ── Tier 1 — LLM (fire and forget, every 24 ticks) ───────────────────────────
-    
+    # ── Tier 1 — LLM ──────────────────────────────────────────────────────
     if tick % 48 == 0:
-        # Only call LLM for 3 agents per tick cycle to stay within rate limits
-        # Rotate which agents get LLM vs neural fallback
-        tier1_cycle_index = (tick // 24) % len(tier1_agents)
-        llm_batch = tier1_agents[tier1_cycle_index:tier1_cycle_index + 3]
-        neural_fallback = [a for a in tier1_agents if a not in llm_batch]
-
-        # Neural fallback for non-LLM agents this cycle
-        for agent in neural_fallback:
-            decision = run_neural_decision(agent, economy)
-            apply_wealth_change(agent, decision['action'], economy)
-            agent.last_action = decision['action']
-            agent.last_action_tick = tick
-            agent_updates.append(agent)
-
-        # LLM for the 3 selected agents — sequential not parallel
-        import time
-        for agent in llm_batch:
+        for agent in tier1_agents:
             try:
-                decision = run_llm_decision(agent, economy)
-                time.sleep(4)  # 4 second gap between calls = max 15/min
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(run_tier1_agent, agent, economy)
+                    try:
+                        decision = future.result(timeout=LLM_TIMEOUT)
+                    except Exception:
+                        decision = run_neural_decision(agent, economy)
             except Exception as e:
-                decision = run_neural_decision(agent, economy)
+                decision = {'action': 'save', 'confidence': 0.4,
+                            'reasoning': str(e), 'tier': 1}
+
             apply_wealth_change(agent, decision['action'], economy)
             agent.last_action = decision['action']
             agent.last_action_tick = tick
@@ -218,7 +189,7 @@ def run_decision_router(context: dict) -> dict:
             agent.last_action_tick = tick
             agent_updates.append(agent)
 
-    # ── Bulk update all agents ────────────────────────────────────────────────
+    # ── Bulk update ────────────────────────────────────────────────────────
     if agent_updates:
         Agent.objects.bulk_update(
             agent_updates,
@@ -228,7 +199,9 @@ def run_decision_router(context: dict) -> dict:
     context['agent_updates'] = decision_log
 
     if tick % 24 == 0:
-        tier_counts = {1: len(tier1_agents), 2: len(tier2_agents), 3: len(tier3_agents)}
-        logger.info(f'[Tick {tick}] Decision router — T1:{tier_counts[1]} T2:{tier_counts[2]} T3:{tier_counts[3]}')
+        logger.info(
+            f'[Tick {tick}] Decision router — '
+            f'T1:{len(tier1_agents)} T2:{len(tier2_agents)} T3:{len(tier3_agents)}'
+        )
 
     return context
