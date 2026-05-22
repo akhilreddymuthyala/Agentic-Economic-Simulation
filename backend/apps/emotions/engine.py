@@ -213,7 +213,40 @@ ROLE_SENSITIVITY = {
     AgentRole.RESOURCE_SUPPLIER: 0.9,
 }
 
+def apply_panic_circuit_breaker(agents: list, context: dict) -> list:
+    """
+    If more than 80% of agents are in panic for too long,
+    force a partial reset toward baseline to allow recovery.
+    This simulates central bank intervention / market stabilisation.
+    """
+    panic_count = sum(1 for a in agents if a.dominant_emotion == 'panic')
+    panic_ratio = panic_count / len(agents) if agents else 0
 
+    if panic_ratio < 0.80:
+        return agents
+
+    policy = context.get('policy_state', {})
+    stimulus_active = policy.get('stimulus_active', False)
+    gov_spending = policy.get('government_spending', 10000)
+
+    # Only trigger circuit breaker if government is actively intervening
+    if not stimulus_active and gov_spending < 100000:
+        return agents
+
+    logger.warning(
+        f'[Tick {context["tick"]}] PANIC CIRCUIT BREAKER — '
+        f'{panic_ratio*100:.0f}% agents in panic. Forcing partial recovery.'
+    )
+
+    for agent in agents:
+        if agent.dominant_emotion == 'panic':
+            # Pull panic down toward recoverable levels
+            agent.emotion_panic = max(EMOTION_BASELINE['panic'], agent.emotion_panic * 0.6)
+            agent.emotion_fear = max(EMOTION_BASELINE['fear'], agent.emotion_fear * 0.7)
+            agent.emotion_optimism = max(0.2, agent.emotion_optimism + 0.08)
+            agent.emotion_trust = max(0.3, agent.emotion_trust + 0.05)
+
+    return agents
 def run_emotion_engine(context: dict) -> dict:
     """
     Main emotion engine entry point.
@@ -229,7 +262,8 @@ def run_emotion_engine(context: dict) -> dict:
     updated = []
 
     emotion_counts = {e: 0 for e in AgentEmotionState.values}
-
+    # Apply panic circuit breaker before processing
+    agents = apply_panic_circuit_breaker(agents, context)
     for agent in agents:
         # 1. Decay
         agent = apply_decay(agent)
