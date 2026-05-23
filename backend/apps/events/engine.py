@@ -29,9 +29,29 @@ from apps.simulation.tuning import (
 )
 logger = logging.getLogger(__name__)
 
-MONOPOLY_WEALTH_PCT = 0.50           
+             
+
+# ── Detection thresholds ──────────────────────────────────────────────────────
+RECESSION_GDP_DECLINE_DAYS = 3
+RECESSION_GDP_DECLINE_PCT = -0.3
+
+MARKET_CRASH_CONFIDENCE_THRESHOLD = 38.0
+MARKET_CRASH_CONFIDENCE_DROP = 12.0
+
+PANIC_WAVE_AGENT_PCT = 0.35
+
+MONOPOLY_WEALTH_PCT = 0.50
+
+INNOVATION_BOOM_RESEARCHER_THRESHOLD = 2      # min researcher count
+INNOVATION_BOOM_WEALTH_GROWTH = 0.05
+INNOVATION_BOOM_GDP_GROWTH = 0.3
+INNOVATION_BOOM_RESEARCHER_WEALTH = 6000.0
+
+UNEMPLOYMENT_CRISIS_THRESHOLD = 20.0
+
 SHORTAGE_CRITICAL_LEVEL = 20.0
-RECOVERY_GDP_GROWTH_THRESHOLD = 1.0    
+
+RECOVERY_GDP_GROWTH_THRESHOLD = 1.0
 
 # ── Rolling history for trend detection ───────────────────────────────────────
 # Stores last 72 economy snapshots (3 sim days at 24 ticks/day)
@@ -224,19 +244,19 @@ def detect_innovation_boom(context: dict) -> dict:
     if len(researchers) < INNOVATION_BOOM_RESEARCHER_THRESHOLD:
         return context
 
-    # Check if researchers are accumulating wealth (proxy for innovation success)
     avg_researcher_wealth = sum(r.wealth for r in researchers) / len(researchers)
     gdp_growth = context['economy'].get('gdp_growth_rate', 0)
     market_conf = context['economy'].get('market_confidence', 70)
 
-    if (avg_researcher_wealth > 8000 and
-            gdp_growth > 0.5 and
-            market_conf > 65):
+    if (avg_researcher_wealth > INNOVATION_BOOM_RESEARCHER_WEALTH and
+            gdp_growth > INNOVATION_BOOM_GDP_GROWTH and
+            market_conf > 55):
         severity = min(1.0, gdp_growth / 5.0)
         _record_event(
             EventType.INNOVATION_BOOM, severity,
             f'Innovation boom — researcher productivity surge detected. '
-            f'GDP growth at {gdp_growth:.2f}%, avg researcher wealth ${avg_researcher_wealth:.0f}.',
+            f'GDP growth at {gdp_growth:.2f}%, '
+            f'avg researcher wealth ${avg_researcher_wealth:.0f}.',
             context,
         )
     return context

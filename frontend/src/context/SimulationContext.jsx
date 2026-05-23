@@ -32,6 +32,23 @@ const initialState = {
     totalWealth: 500000,
   },
 
+  policyControls: {
+    tax_rate: 20,
+    interest_rate: 5,
+    government_spending: 10000,
+    subsidy_level: 0,
+    stimulus_active: false,
+    stimulus_amount: 0,
+    market_regulation: 50,
+  },
+  resourceControls: {
+    food_supply: 85,
+    oil_supply: 80,
+    energy_availability: 82,
+    housing_supply: 75,
+    water_resources: 90,
+  },
+
   // Agents
   agentDeltas: [],
   emotionDistribution: {},
@@ -83,6 +100,12 @@ function reducer(state, action) {
     case 'HEARTBEAT':
       return { ...state, lastHeartbeat: Date.now() }
     
+    case 'SET_POLICY_CONTROLS':
+      return { ...state, policyControls: { ...state.policyControls, ...action.payload } }
+
+    case 'SET_RESOURCE_CONTROLS':
+      return { ...state, resourceControls: { ...state.resourceControls, ...action.payload } }
+
     case 'SET_SOCIAL_CONTROLS':
       return { ...state, socialControls: { ...state.socialControls, ...action.payload } }  
 
@@ -241,7 +264,7 @@ export function SimulationProvider({ children }) {
     fetch('/api/simulation/status/')
       .then(r => r.json())
       .then(data => dispatch({ type: 'SIM_STATUS', payload: data }))
-      .catch(() => {})
+      .catch(() => {})  
 
     // Init WebSocket
     initSocket(handleMessage)
@@ -256,6 +279,18 @@ export function SimulationProvider({ children }) {
       closeSocket()
     }
   }, [handleMessage])
+
+  useEffect(() => {
+    fetch('/api/policies/')
+      .then(r => r.json())
+      .then(data => dispatch({ type: 'SET_POLICY_CONTROLS', payload: data }))
+      .catch(() => {})
+
+    fetch('/api/resources/')
+      .then(r => r.json())
+      .then(data => dispatch({ type: 'SET_RESOURCE_CONTROLS', payload: data }))
+      .catch(() => {})
+  }, [])  
 
   return (
     <SimulationContext.Provider value={{ state, dispatch }}>

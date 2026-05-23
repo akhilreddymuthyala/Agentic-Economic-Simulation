@@ -102,6 +102,10 @@ def calculate_inflation(current_inflation: float, policy: PolicyState,
     reversion = (2.0 - current_inflation) * 0.01
 
     new_inflation = current_inflation + delta + reversion
+    # Allow inflation to fall below current level when interest rates are high
+    # and government actively intervenes
+    interest_dampener_strong = -(policy.interest_rate - 2.0) * 0.15
+    new_inflation = new_inflation + interest_dampener_strong
     return max(0.0, min(50.0, new_inflation))
 
 
@@ -149,22 +153,18 @@ def calculate_unemployment(current_unemployment: float, policy: PolicyState,
 def calculate_market_confidence(current_confidence: float, policy: PolicyState,
                                 avg_optimism: float, avg_fear: float,
                                 avg_panic: float, gdp_growth: float) -> float:
-    """
-    Market confidence driven by:
-    - Agent emotions (optimism raises, fear/panic drops)
-    - GDP growth
-    - Interest rate stability
-    - Policy regulation
-    """
-    emotion_effect = (avg_optimism - avg_fear - avg_panic * 2.0) * 20.0
-    gdp_effect = gdp_growth * 2.0
-    regulation_effect = (policy.market_regulation - 50.0) * 0.05
-    stimulus_effect = 3.0 if policy.stimulus_active else 0.0
+    # Strong mean-reversion toward 50 when confidence is at extremes
+    # This prevents permanent 0% or 100% confidence lock
+    reversion_strength = 0.05 if current_confidence < 10 else 0.02
+    reversion = (50.0 - current_confidence) * reversion_strength
 
-    # Revert toward 70 baseline
-    reversion = (70.0 - current_confidence) * 0.02
+    emotion_effect = (avg_optimism - avg_fear - avg_panic * 2.0) * 10.0
+    gdp_effect = gdp_growth * 1.5
+    regulation_effect = (policy.market_regulation - 50.0) * 0.08
+    stimulus_effect = 5.0 if policy.stimulus_active else 0.0
+    spending_effect = min(3.0, policy.government_spending / 50000.0)
 
-    delta = emotion_effect + gdp_effect + regulation_effect + stimulus_effect + reversion
+    delta = emotion_effect + gdp_effect + regulation_effect + stimulus_effect + spending_effect + reversion
     new_confidence = current_confidence + delta
     return max(0.0, min(100.0, new_confidence))
 
