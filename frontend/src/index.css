@@ -12,44 +12,43 @@ html,
 body,
 #root {
   height: 100%;
-  background-color: #050810;
-  color: #e2e8f0;
-  font-family: 'Share Tech Mono', monospace;
+  background-color: #0d1117;
+  color: #e8f4f8;
+  font-family: 'Inconsolata', monospace;
+  font-size: 15px;
 }
 
 ::-webkit-scrollbar {
   width: 4px;
 }
 ::-webkit-scrollbar-track {
-  background: #0b1120;
+  background: #141c27;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1a2744;
+  background: #1e2d42;
   border-radius: 2px;
 }
 
+/* Pastel Aqua glow — replaces old cyan */
 .glow-accent {
-  box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
+  box-shadow: 0 0 14px rgba(213, 246, 251, 0.35);
 }
 
+/* Pastel Lime glow — replaces old green */
 .glow-green {
-  box-shadow: 0 0 12px rgba(0, 255, 136, 0.3);
+  box-shadow: 0 0 14px rgba(209, 254, 184, 0.35);
 }
 
+/* Pastel Rose glow — replaces old red */
 .glow-red {
-  box-shadow: 0 0 12px rgba(255, 51, 102, 0.3);
+  box-shadow: 0 0 14px rgba(246, 184, 208, 0.35);
 }
 
 @keyframes pulse-soft {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  50% { opacity: 0.55; }
 }
 
 .pulse-soft {
   animation: pulse-soft 2s ease-in-out infinite;
-}
-
-@keyframes scan-line {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(100vh); }
 }
