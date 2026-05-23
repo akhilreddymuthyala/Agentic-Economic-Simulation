@@ -17,7 +17,7 @@ export default function Layout({ children }) {
   const [collapsed, setCollapsed] = useState(false)
 
   const statusColor = {
-    running: '#00ff88',
+    running: '#D1FEB8',
     paused: '#ffcc00',
     stopped: '#ff3366',
     idle: '#64748b',
@@ -48,18 +48,19 @@ export default function Layout({ children }) {
             gap: 10,
           }}
         >
-          <span style={{ fontSize: 20, color: '#00d4ff' }}>⬡</span>
+          <span style={{ fontSize: 20, color: '#D5F6FB' }}>◈</span>
           {!collapsed && (
             <span
               style={{
-                fontFamily: 'Orbitron, monospace',
-                fontSize: 11,
-                color: '#00d4ff',
-                letterSpacing: 1,
+                fontFamily: 'Rajdhani, sans-serif',
+                fontSize: 14,
+                fontWeight: 700,
+                color: '#D5F6FB',
+                letterSpacing: 2,
                 lineHeight: 1.3,
               }}
             >
-              EMERGENT AI<br />ECONOMY
+              ECONOMY<br />SIMULATION
             </span>
           )}
         </div>
@@ -76,12 +77,12 @@ export default function Layout({ children }) {
                 alignItems: 'center',
                 gap: 12,
                 padding: collapsed ? '10px 16px' : '10px 16px',
-                color: isActive ? '#00d4ff' : '#64748b',
+                color: isActive ? '#D5F6FB' : '#64748b',
                 textDecoration: 'none',
-                fontFamily: 'Share Tech Mono, monospace',
+                fontFamily: 'Inconsolata, monospace',
                 fontSize: 12,
-                borderLeft: isActive ? '2px solid #00d4ff' : '2px solid transparent',
-                background: isActive ? 'rgba(0,212,255,0.06)' : 'transparent',
+                borderLeft: isActive ? '2px solid #D5F6FB' : '2px solid transparent',
+                background: isActive ? 'rgba(213, 246, 251, 0.06)' : 'transparent',
                 transition: 'all 0.15s',
                 whiteSpace: 'nowrap',
               })}
@@ -99,7 +100,7 @@ export default function Layout({ children }) {
             borderTop: '1px solid #1a2744',
             fontSize: 10,
             color: '#64748b',
-            fontFamily: 'Share Tech Mono, monospace',
+            fontFamily: 'Inconsolata, monospace',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
